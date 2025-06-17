@@ -1,0 +1,3 @@
+([('GEMA_Converter',
+   '/Users/tomjoeres/Documents/GEMA/format txt to xls/dist/GEMA_Converter',
+   'EXECUTABLE')],)
