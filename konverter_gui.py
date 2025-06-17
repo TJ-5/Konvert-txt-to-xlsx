@@ -48,6 +48,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("GEMA TXT → Excel Konverter mit Vorschau")
         self.setAcceptDrops(True)
+        self.resize(800, 600)  # Größeres Startfenster
 
         self.df = pd.DataFrame()
         self.model = None
@@ -65,7 +66,6 @@ class MainWindow(QMainWindow):
         self.export_button.clicked.connect(self.export_to_excel)
         layout.addWidget(self.export_button)
 
-        # Neuer Button zum manuellen Zurücksetzen
         self.reset_button = QPushButton("Daten löschen / Neue Datei laden")
         self.reset_button.clicked.connect(self.reset_data)
         layout.addWidget(self.reset_button)
@@ -74,23 +74,18 @@ class MainWindow(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        # Initial state
         self.update_button_states()
 
         # Keyboard Shortcuts
-        # Enter für Export
         self.export_shortcut = QShortcut(QKeySequence("Return"), self)
         self.export_shortcut.activated.connect(self.export_to_excel)
         
-        # Numpad Enter für Export
         self.export_shortcut_numpad = QShortcut(QKeySequence("Enter"), self)
         self.export_shortcut_numpad.activated.connect(self.export_to_excel)
         
-        # Delete und Entf für Zeilen löschen
         self.delete_shortcut = QShortcut(QKeySequence("Delete"), self)
         self.delete_shortcut.activated.connect(self.delete_selected_rows)
         
-        # Backspace als Alternative
         self.delete_shortcut_backspace = QShortcut(QKeySequence("Backspace"), self)
         self.delete_shortcut_backspace.activated.connect(self.delete_selected_rows)
 
@@ -124,8 +119,12 @@ class MainWindow(QMainWindow):
             self.table.setModel(self.model)
             self.table.setSelectionBehavior(self.table.SelectRows)
             self.table.setSelectionMode(self.table.ExtendedSelection)
+            
+            # Automatische Spaltenbreite für Clip-Spalte
+            self.table.resizeColumnToContents(1)
+            if self.table.columnWidth(1) > 500:
+                self.table.setColumnWidth(1, 500)  # Maximalbreite
 
-            # Update button states and window title
             self.update_button_states()
             filename = os.path.basename(filepath)
             self.setWindowTitle(f"GEMA TXT → Excel Konverter - {filename}")
@@ -141,23 +140,34 @@ class MainWindow(QMainWindow):
         return None
 
     def delete_selected_rows(self):
-        # Prüfen ob Tabelle fokussiert ist und Zeilen ausgewählt sind
         if not self.table.hasFocus() and not self.has_selected_rows():
             return
             
         selected_indexes = self.table.selectionModel().selectedRows()
-        row_indices = sorted([index.row() for index in selected_indexes], reverse=True)
-        if self.model and row_indices:
-            self.model.removeRows(row_indices)
+        if not selected_indexes:
+            return
+            
+        # Position vor dem Löschen merken
+        row_indices = sorted([index.row() for index in selected_indexes])
+        first_selected = row_indices[0]
+        
+        # Zeilen löschen
+        self.model.removeRows(sorted(row_indices, reverse=True))
+        
+        # Position nach dem Löschen wiederherstellen
+        if self.model.rowCount() > 0:
+            new_row = min(first_selected, self.model.rowCount() - 1)
+            self.table.selectRow(new_row)
+            self.table.scrollTo(self.model.index(new_row, 0))
+        
+        self.update_button_states()
     
     def has_selected_rows(self):
-        """Prüft ob Zeilen ausgewählt sind"""
         if not self.table.selectionModel():
             return False
         return len(self.table.selectionModel().selectedRows()) > 0
 
     def export_to_excel(self):
-        # Prüfen ob Daten vorhanden sind, bevor exportiert wird
         if not self.model or self.model.rowCount() == 0:
             QMessageBox.warning(self, "Hinweis", "Keine Daten zum Exportieren.")
             return
@@ -173,33 +183,24 @@ class MainWindow(QMainWindow):
                 try:
                     df.to_excel(export_path, index=False)
                     QMessageBox.information(self, "Gespeichert", f"Gespeichert unter:\n{export_path}")
-                    
-                    # Nach erfolgreichem Export: Daten zurücksetzen
                     self.reset_data()
-                    
                 except Exception as e:
                     QMessageBox.critical(self, "Fehler beim Speichern", str(e))
             else:
                 QMessageBox.warning(self, "Fehler", "Kein Pfad zur Quelldatei bekannt.")
 
     def reset_data(self):
-        """Setzt alle Daten zurück und bereitet das Programm für eine neue Datei vor"""
         self.df = pd.DataFrame()
         self.model = None
         self.loaded_filepath = None
         
-        # Tabelle leeren
         empty_model = PandasModel(pd.DataFrame())
         self.table.setModel(empty_model)
         
-        # Button-Zustände aktualisieren
         self.update_button_states()
-        
-        # Fenstertitel zurücksetzen
         self.setWindowTitle("GEMA TXT → Excel Konverter mit Vorschau")
 
     def update_button_states(self):
-        """Aktualisiert den Zustand der Buttons basierend auf geladenen Daten"""
         has_data = self.model is not None and self.model.rowCount() > 0
         
         self.delete_button.setEnabled(has_data)
@@ -209,6 +210,5 @@ class MainWindow(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
-    window.resize(600, 400)
     window.show()
     sys.exit(app.exec_())
